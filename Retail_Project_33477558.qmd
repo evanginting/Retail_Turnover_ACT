@@ -1,0 +1,912 @@
+---
+title: "Retail_Project_33477558"
+format: html
+editor: visual
+---
+::: {style="text-align: justify;"}
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+library(fpp3)
+library(tidyverse)
+library(readxl)
+library(kableExtra)
+theme_set(theme_bw())
+
+get_my_data <- function(student_id) {
+  set.seed(student_id)
+  all_data <- readr::read_rds("https://bit.ly/monashretaildata")
+  while(TRUE) {
+    retail <- filter(all_data, `Series ID` == sample(`Series ID`, 1))
+    if(!any(is.na(fill_gaps(retail)$Turnover))) return(retail)
+  }
+}
+# Replace the argument with your student ID
+retail <- get_my_data(33477558)
+```
+
+## Statistical Feature of Retail Turnover in Australia Capital Territory (ACT)
+
+### Overall Trend
+
+```{r}
+#| label: fig-trend1
+#| fig-cap: "Retail Turnover Trend in ACT"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  ggplot(aes(x = Month, y = Turnover)) +
+  geom_line() +
+  #scale_x_continuous(breaks=seq(1982,2022,2)) +
+  #autoplot(Turnover) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Retail Turnover in ACT",
+              subtitle = "Data Period: 1982 - 2022") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+@fig-trend1 appears to follow the multiplicative seasonality with global upward trends. There are noticeable local trends, initially, there was a gradual upward local trend until the year 2000, followed by period of stability. Afterward, there was a brief downward local trend, which did not last very long, and finally, a significant increase local trend until recent period. 
+
+In terms of seasonality, turnover peaks every December and reaching its troughs every January. Initially when the turnover are low, seasonal fluctuations are also small, but they increase as turnover grows. Outliers can also be spotted in the recent years, marked by significant drops as well as significant spikes. Taking a broader perspective, seasonality may be influenced by increased spending during Christmas and New Year holidays.
+
+### COVID-19 Effect
+```{r}
+#| label: fig-covid
+#| fig-cap: "Retail Turnover Trend in ACT"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  filter(year(Month) >= 2019) |>
+  ggplot(aes(x = Month, y = Turnover)) +
+  geom_line() +
+  #scale_x_continuous(breaks=seq(1982,2022,2)) +
+  #autoplot(Turnover) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Retail Turnover in ACT during COVID-19",
+              subtitle = "Data Period: 2019 - 2022") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+The @fig-covid depicts the condition during COVID-19, we added 2019 for comparison purposes. As can be seen, COVID-19 is severely disrupted retail business in ACT. Some outstanding observations from the plot can be notified, which are the significant drop near the end of 2021 and the seasonal peak in 2021 that is just below the peak at prior year. In the later analysis, we will see how this condition affect our forecast.     
+
+### Seasonal Trend
+
+```{r}
+#| label: fig-trend2
+#| fig-cap: "Seasonal Plot of Monthly Retail Turnover in ACT"
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  gg_season(y = Turnover) +
+  xlab("Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Seasonal Plot: Retail Turnover in ACT",
+          subtitle = "Data Period: 1982 - 2022") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+This @fig-trend2 provides a better view of the seasonality mentioned in the previous section. It illustrates fluctuations over the years across different months. The plot reveals that the highest values each year are consistently recorded in December, while the lowest values are observed in January. With this level of detail, a new insight emerges: there is a small spike in March for most years. Additionally, declining trends in February (in most of the years) are noticeable, likely due to the month's shorter duration compared to others. Furthermore, significant fluctuations in the recent period (especially in March and September), as mentioned earlier, are evident. This plot supports our statement regarding the effect of COVID-19 in the previous section. The magnitude of drop in September had not been ever occured before. The lower seasonal peak was also happened during COVID. 
+
+### Seasonal Subseries Trend
+
+```{r}
+#| label: fig-trend3
+#| fig-cap: "Seasonal Subseries Plot of Monthly Retail Turnover in ACT"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+#| fig-height: 4
+#| fig-width: 10
+
+retail |>
+  gg_subseries(y = Turnover) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Seasonal Subseries Plot: Retail Turnover in ACT",
+          subtitle = "Data Period: 1982 - 2022") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+The @fig-trend3 reinforces the statement regarding the overall trend that was mentioned previously. In general, the trend exhibits a consistent pattern of upward movement. The shapes are similar across months, they begin with an upward trajectory, experience a period of relative stability, and conclude with another upward trend. December notably emerges as the month with the highest average turnover, while January (as well as February) records the lowest. Furthermore, the turnover movements from the lowest to the highest points of each month appear to be more pronounced in the later months.
+
+### Assessing Current Condition for Modelling Purposes
+
+```{r}
+#| label: fig-display
+#| fig-cap: "Time Plot, ACF, and PACF Plots of Retail Turnover in ACT"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+#| fig-height: 4
+#| fig-width: 10
+
+retail |>
+  gg_tsdisplay(Turnover, plot_type = "partial") +
+  ggtitle(label = "Time Plot, ACF, and PACF Plots: Retail Turnover in ACT",
+          subtitle = "Data Period: 1982 - 2022")
+```
+From @fig-display, we can see that the data is non-stationary. Hence, a transformation is needed before we make the model for the forecast. We will check later if we need seasonal difference or even first difference.
+
+## Data Transformation and Unit Root Test
+### Data Transformation
+
+**Step 1: Data Transformation**
+
+**Log Transformation**
+```{r}
+#| label: fig-trf1
+#| fig-cap: "The Log Transformed Data"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  autoplot(log(Turnover)) +
+  xlab("Year and Month") +
+  ylab("Log Transformed Retail Turnover") +
+  ggtitle(label = "Log Transformed Retail Turnover in ACT",
+          subtitle = "Data Period: 1982 - 2022") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+The log transformation in @fig-trf1 give us a fairly balanced seasonality throughout the entire period. While there is some lower seasonality observed during 1985 to 1990 compared to other period, the overall height of seasonality remain fairly consistent apart from those years. Therefore, we can conclude that this is a strong transformation.
+
+**Box-Cox Transformation**
+
+Before applying the Box-Cox transformation, we can use Guerrero Method to get our optimal lambda.
+
+```{r}
+#| label: tbl-guerrero
+#| tbl-cap: "Lambda by Guerrero Method"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+# Calculating lambda by using Guerrero method
+lambda_guerrero <- retail |>
+  features(Turnover, features = guerrero)
+
+lambda_guerrero |>
+  kable() |>
+  kable_styling(full_width = T)
+```
+
+The Guerrero method give `r lambda_guerrero$lambda_guerrero` as our lambda. Below is the plot Box-Cox transformation with lambda obtained from Guerrero method.
+
+```{r}
+#| label: fig-trf2
+#| fig-cap: "The Box-Cox (Lambda = 0.04826666) Transformed Data"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  autoplot(box_cox(Turnover, 0.04826666)) +
+  ggtitle("Box-Cox Transformation with Lambda by Guerrero") +
+  xlab("Year and Month") +
+  ylab("Box-Cox Transformed Turnover, Lambda = 0.04826666") +
+  ggtitle(label = "Box-Cox Transformed Retail Turnover in ACT (Lambda by Guerrero Method)",
+          subtitle = "Data Period: 1982 - 2022") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+As can be seen from the picture, it is similar to what we had with log transformation. The seasonality's height are fairly consistent throughout the period, only certain period in 1985 - 1990 have lower seasonality than the others. Changing the lambda by 0.1 or 0.2 point does not really give much difference, therefore, this lambda is good enough for our model.
+
+
+**Step 2: Seasonal Difference**
+
+After data transformation, the next step would be applying seasonal difference.
+```{r}
+#| label: fig-seasondiff
+#| fig-cap: "The Seasonal Difference of the Data"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  gg_tsdisplay(
+    difference(
+      box_cox(Turnover, 0.04826666), 
+      lag = 12), 
+    plot_type = "partial", lag = 36) +
+  labs(title = "Seasonal Differenced for Retail Turnover in ACT", 
+       subtitle = "Data Period: 1982 - 2022", 
+       y = "")
+```
+
+The seasonal difference as depicted from @fig-seasondiff shows that the time plot have not reached stationary point yet, as it still moving up and down. Additionally, from ACF plot we can see there is sinusoidal pattern, meaning autocorrelation still exist. 
+
+**Step 3: Difference**
+
+Since our data is still not stationary, then we will apply first difference.
+```{r}
+#| label: fig-diff2
+#| fig-cap: "The Additional Difference to the Data"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+retail |>
+  gg_tsdisplay(
+    difference(
+      difference(
+        box_cox(Turnover, 0.04826666), 
+        lag = 12)), 
+      plot_type = "partial", lag = 48) +
+  labs(title = "Double Differenced for Retail Turnover in ACT", 
+       subtitle = "Data Period: 1982 - 2022", 
+       y = "")
+```
+
+With double difference, we are able to make the data stationary. Some key points that supports this statement are: 
+
+- The time plot is showing stationary trend, which is mostly wandering around zero. Altough the variances are bigger at the end of the plot which could be because of COVID-19 effect, but we can ignore that because it is just outlier.
+- The ACF and PACF plot does not have a decaying lags, indicating we have removed the seasonality in the data.
+
+### Unit Root Test
+
+Let's do unit-root test to check whether we actually need a differencing, double differencing, or just using the default transformation (in this case, box-cox) is adequate enough to build the model.
+
+```{r}
+#| label: tbl-unitroot4
+#| tbl-cap: "Unit Root Test for Seasonal Differencing"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+retail |>
+  mutate(bc_turnover = box_cox(Turnover, 0.04826666)) |>
+  features(bc_turnover, unitroot_nsdiffs) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+After applying seasonal difference unit test, it suggest us to do the seasonal difference, because the nsdiffs value is 1. Moving on to the next test to determine if we need first difference.
+
+```{r}
+#| label: tbl-unitroot5
+#| tbl-cap: "Unit Root Test for First Differencing"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+retail |>
+  mutate(bc_turnover = difference(box_cox(Turnover, 0.04826666), 12)) |>
+  features(bc_turnover, unitroot_ndiffs) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+From this unit-root test, it seems we do not need the first difference. However, during our preliminary assessment using data visualisation, in @fig-diff2 where we apply seasonal difference, the data is still not stationary. Therefore, we can justify this test with this figure where we apply first difference in order to make the data stationary.
+
+
+## Methodology and Evaluation for ARIMA and ETS Models
+In this section, we will define the appropriate model for our data that will be fitted through ARIMA and ETS method. We are going to start with ARIMA and then followed by ETS. This discussion will also completed with the evaluation of the models. 
+
+### Methodology for Shortlisting ARIMA Model
+In shortlisting our potential ARIMA candidate, we can take a look at the ACF and PACF plot at the @fig-diff2 again. First, let's assess the AR model from PACF plot. In this plot, we can see that in terms of seasonal lag, there are 3 significant spikes at lag 12, 24, and 36. With that information, we will define our seasonal AR(P) = 3. Next, in terms of non-seasonal lag, there are two lags at lag 1 and 2. Therefore, we will set our non-seasonal AR(p) = 2. 
+
+Moving on to the MA model, we shift our focus to the ACF plot. In this plot, there are actually 3 lags that are surpassing the blue dot line, which are lag 12, 24, and 36, however, since lag 24 and lag 36 are very close to the line, we will ignore that and define our seasonal MA(Q) = 1. For non-seasonal MA, there are two significant lags identified, which are lag 1 and lag 2. Hence, we will set our non-seasonal MA(q) = 2. However, it is noticeable that there are other non-seasonal lags at lag 14, 23, and 46, but these are way too long in the past, so we can ignore that. 
+
+With all of these information in hand, the ARIMA model is:
+
+**On box_cox(y, lambda = 0.04826666)**
+
+- ARIMA(p = 2, d = 1, q = 0)(P = 3, D = 1, Q = 0)[12] This is an AR model
+- ARIMA(p = 0, d = 1, q = 2)(P = 0, D = 1, Q = 1)[12] This is an MA model
+
+And some combinations (by guessing)
+
+- ARIMA(p = 1, d = 1, q = 1)(P = 1, D = 1, Q = 1)[12]
+- ARIMA(p = 2, d = 1, q = 1)(P = 1, D = 1, Q = 1)[12]
+- ARIMA(p = 1, d = 1, q = 2)(P = 1, D = 1, Q = 1)[12]
+- ARIMA(p = 2, d = 1, q = 2)(P = 2, D = 1, Q = 1)[12]
+- ARIMA(p = 2, d = 1, q = 2)(P = 3, D = 1, Q = 1)[12]
+
+In these models, we do not need constant, because the time plot in @fig-diff2 has already centered around zero (0).
+
+### Methodology for Shortlisting ETS Model
+When determining the appropriate model for ETS, we should look at the initial state of the retail turnover trend (before transformation). We are looking at three components, which are error, trend, and seasonality. As has been mentioned previously from @fig-trend1, the data has multiplicative seasonality. For trend, even though it seems they follow additive trend but there were some periods of stability during 2001 - 2010, meaning we could consider an additive damped trend as well. Lastly, for the error terms, as the variance of the error increases with the increase of the level of the data (as can be seen after each seasonal spike), then it's clear that the model should include multiplicative error. Finally, with all considerations, these are our shortlist of ETS model:
+
+- ETS(M, A, M); Error "Multiplicative", Trend "Additive", Seasonality "Multiplicative". Handling overall trend which showcasing an additive trend.
+- ETS(M, Ad, M); Error "Multiplicative", Trend "Additive damped", Seasonality "Multiplicative". Handling some periods of stability in an additive trend.
+- ETS(Auto)
+
+We add an automatic model for comparison purposes, which later can be evaluated from the AICc and accuracy results.
+
+### Splitting the Data into Train and Test Set
+```{r}
+# Splitting training set and testing set
+retail_tr <- retail |> filter(lubridate::year(Month) < 2021)
+retail_ts <- retail |> filter(lubridate::year(Month) >= 2021)
+```
+
+
+
+### Fit the model for ARIMA and ETS
+
+#### ARIMA
+```{r}
+#| label: tbl-arimamod
+#| tbl-cap: "List of selected ARIMA Models"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_arima <- retail_tr |>
+  model(
+    arima_auto = ARIMA(box_cox(Turnover, 0.04826666), stepwise = FALSE, approx = FALSE),
+    arima210310 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(2,1,0) + PDQ(3,1,0)),
+    arima012011 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(0,1,2) + PDQ(0,1,1)),
+    arima111111 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(1,1,1) + PDQ(1,1,1)),
+    arima211111 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(2,1,1) + PDQ(1,1,1)),
+    arima112111 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(1,1,2) + PDQ(1,1,1)),
+    arima212211 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(2,1,2) + PDQ(2,1,1))
+  )
+
+fit_arima |>
+  kable() |>
+  kable_styling(full_width = T)
+```
+The automatic ARIMA give us ARIMA(1,1,1)(0,1,1)[12] on box_cox(y, lambda = 0.04826666), different from our model selections. We will see which one is the best model later in the evaluation section.
+
+#### ETS
+```{r}
+#| label: tbl-etsmod
+#| tbl-cap: "List of selected ETS Models"
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_ets <- retail_tr |>
+  model(
+    ets_madm = ETS(Turnover ~ error("M") + trend("Ad") + season("M")),
+    ets_mam = ETS(Turnover ~ error("M") + trend("A") + season("M")),
+    ets_auto = ETS(Turnover)
+  )
+
+fit_ets |>
+  kable() |>
+  kable_styling(full_width = T)
+```
+After fitting the model, it turns out that the automatic ETS generate the same model as what we have selected, which is ETS(M,A,M). Therefore, moving forward automatic ETS will be replaced by our selected model ETS(M,A,M) in model evaluation.
+
+### Models Evaluation
+In evaluating the models, first we will look at the AIC (Akaike Information Criterion) from each models. As we can not compare ARIMA and ETS models directly, first, we will evaluate ARIMA models and followed by ETS models.
+
+#### ARIMA models
+
+```{r}
+#| label: tbl-aictest
+#| tbl-cap: "AIC Test to Check Best Models from ARIMA"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_arima |>
+  glance() |>
+  select(-ar_roots, -ma_roots) |>
+  arrange(AICc) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+In selecting the best model, we look at the smallest possible AICc values (closest to negative infinity). As we have arranged the table according to lowest AICc, it turns out the top 3 model are the model which based on our speculation, which are ARIMA(1,1,1)(1,1,1)[12], ARIMA(1,1,2)(1,1,1)[12], ARIMA(2,1,1)(1,1,1)[12]. Model ARIMA(1,1,1)(1,1,1)[12] comes out as the best at this evaluation, but we will do further investigation before deciding the best model when we check the accuracy.
+
+#### ETS models
+```{r}
+#| label: tbl-aictest2
+#| tbl-cap: "AIC Test to Check Best Models from ETS"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_ets |>
+  select(ets_mam, ets_madm) |>
+  glance() |>
+  arrange(AICc) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+Based on AIC, the ETS(M,A,M) generate the smaller AIC compare to the ETS(M,Ad,M). Therefore, we would select ETC(M,A,M) as the best ETS model.
+
+#### Comparing the ARIMA vs ETS on accuracy of the test-set
+
+While we mentioned that ARIMA and ETS can not be compared directly on AIC, we can compare them on the accuracy measures. In doing that, we will include all the models and see which models give the best accuracy.
+```{r}
+#| label: tbl-accperformance
+#| tbl-cap: "Comparing Accuracy Performance of Every Identified Model"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+bind_rows(
+  fit_arima |> accuracy(),
+  fit_ets |> accuracy(),
+  fit_arima |>  forecast(h = 24) |> accuracy(retail),
+  fit_ets |> forecast(h = 24) |> accuracy(retail)
+  ) |>
+  select(-ME, -MPE, -ACF1) |>
+  arrange(RMSE) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+So far, our candidate from ARIMA models is narrowed down to ARIMA(1,1,1)(1,1,1)[12] which is the best on AICc evaluation, model ARIMA(1,1,2)(1,1,1)[12] which is the best on accuracy measure (on training set), and auto ARIMA is the best on accuracy measure (on test set). Auto ARIMA is out of contention in this case because they perform worst in AIC test. Finally, In deciding which one is the best model for ARIMA, we pick model ARIMA(1,1,1)(1,1,1)[12] because from overall performance this model provides better balance (top 1 on AICc test, top 3 on training accuracy, top 3 on test accuracy), while the other model in this accuracy evaluation provides slightly worse balance (despite being the best in AICc). We incline more on the model that has lower RMSE on test set, since we want better predictive performance and accuracy.
+
+On the other hand, for ETS model we will pick ETS(M,A,M) since this model is consistently being the top 1 on AIC (by quiet some points) and RMSE training set. Although, the ETS(M,Ad,M) is better on the RMSE test, but because of the difference in AIC we will stick with ETS(M,A,M).
+
+
+## Picking the Best ARIMA & ETS and Model Forecasts
+From the previous section, we have obtained the best model for ARIMA and ETS, which are ARIMA(1,1,1)(1,1,1)[12] and ETS(M,A,M). In this section, we will discuss on the parameter estimates, residual diagnostics, forecasts, and prediction interval of both models. The discussion will be started from ARIMA model and followed by ETS model.
+
+```{r}
+fit_arima_best <- fit_arima |>
+  select(arima111111)
+
+fit_ets_best <- fit_ets |>
+  select(ets_mam)
+```
+
+
+### ARIMA Model
+
+#### Parameter Estimates
+```{r}
+fit_arima_best |>
+  report()
+```
+From the best ARIMA model, the parameter estimates are:
+
+- Non-Seasonal AR:
+$\phi_1$ = 0.3150
+
+- Non-Seasonal MA:
+$\theta_1$ = -0.6717
+
+- Seasonal AR:
+$\Phi_1$ = 0.3228
+
+- Seasonal MA:
+$\Theta_1$ = -0.9999
+
+- Difference:
+d = 1 (Non-Seasonal);
+D = 1 (Seasonal)
+
+- Seasonal Period: 
+12 (Monthly Period)
+
+#### Residual Diagnostics
+```{r}
+#| label: fig-resid1
+#| fig-cap: "Residuals from the fitted ARIMA(1,1,1)(1,1,1)[12] Model"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_arima_best |>
+  gg_tsresiduals(lag_max = 48) +
+  labs(title = "Residuals from the fitted ARIMA(1,1,1)(1,1,1)[12] Model")
+```
+From @fig-resid1, the variance looks pretty similar throughout the entire periods, some outliers can be spotted especially in the beginning, however most of the time they are similar. The distribution can be seen from histogram, we can conclude that the histogram is normally distributed. However, from the ACF plot, we can see some significant spikes at lag 10, 23, 26, 39 (although there are some more but they are pretty close to the blue line), this might indicate white noise has not been able to remove from the model. To further prove this statement, we can perform Ljung-Box Test.
+
+```{r}
+#| label: tbl-residtest
+#| tbl-cap: "Ljung-Box Test Result of the best ARIMA Model"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+augment(fit_arima_best) |>
+  features(.innov, ljung_box, lag = 36, dof = 4) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+Again, Ljung-Box Test also shows that the model fail the test as the p-value is below 0.05. This means there is enough evidence to reject null hypothesis and we can conclude that the residuals do not appear as white noise series and the model has not captured all the information in the data. Despite this information, the model can still be used for forecasting, but the prediction intervals may not be accurate due to correlated residuals.
+
+#### Forecasts
+```{r}
+#| label: fig-fcarima
+#| fig-cap: "ARIMA Model Forecast 24 months Ahead"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_arima |> 
+  select(State, Industry, arima111111) |>  
+  forecast(h = 24) |> 
+  autoplot(tail(retail_tr, 12*5), alpha = 0.5) +
+  ggtitle(label = "ARIMA Forecast of Monthly Retail Turnover in ACT",
+          subtitle = "24 Months Ahead Forecasts") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+
+#### Prediction Interval
+```{r}
+#| label: tbl-preditrvl1
+#| tbl-cap: "Prediction Interval of the Best ARIMA Models"
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_arima |> 
+  select(arima111111) |>
+  forecast(h = 24) |> 
+  hilo() |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+
+### ETS Model
+
+#### Parameter Estimates
+```{r}
+fit_ets_best |>
+  report()
+```
+
+From the best ETS model, the parameter estimates are:
+
+- $\alpha$ = 0.5652584 
+- $\beta$  = 0.0001057057 
+- $\gamma$ = 0.000101824 
+
+#### Residual Diagnostics
+```{r}
+#| label: fig-resid2
+#| fig-cap: "Innovation Residual from the best ETS Model"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_ets_best |>
+  gg_tsresiduals(lag_max = 48) +
+  labs(title = "Residuals from the fitted ETS(M,A,M) Model")
+```
+
+From @fig-resid2, the variance from the time plot also looks consistently same throughout the period. There are some outliers in the beginning of the period but they are minor. The histogram also follow normal distribution. However, similar with ARIMA model, the ACF plot has some significant spikes, which are lag 10, 12, 16 (there are more significant spikes but they are close to the blue line). Apparently this indicates that the model still has white noise. We will perform further investigation using Ljung-Box test.
+```{r}
+#| label: tbl-residtest2
+#| tbl-cap: "Ljung-Box Test Result of the best ETS Model"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+augment(fit_ets_best) |>
+  features(.innov, ljung_box, lag = 36) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+Again, the p-value is zero, lower than 0.05. Therefore, we reject the null hypothesis. We conclude that the residuals do not appear as white noise series and the model has not captured all the information. Similar with ARIMA model, we can still make forecast with this model however the prediction intervals may not be accurate.
+
+#### Forecasts
+```{r}
+#| label: fig-fcets
+#| fig-cap: "ETS Model Forecast 24 months Ahead"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_ets |> 
+  select(State, Industry, ets_mam) |>  
+  forecast(h = 24) |> 
+  autoplot(tail(retail_tr, 12*5), alpha = 0.5) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "ETS Forecast of Monthly Retail Turnover in ACT",
+          subtitle = "24 Months Ahead Forecasts") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+#### Prediction Interval
+```{r}
+#| label: tbl-preditrvl2
+#| tbl-cap: "Prediction Interval of the Best ETS Models"
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_ets |> 
+  select(ets_mam) |>
+  forecast(h = 24) |>
+  hilo() |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+
+## Comparison of Preferred Model
+```{r}
+#| label: fig-fcarimaets
+#| fig-cap: "ETS Model Forecast 24 months Ahead"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+bind_rows(
+  fit_arima |> select(State, Industry, arima111111) |> forecast(h = "24 months"),
+  fit_ets |> select(State, Industry, ets_madm) |> forecast(h = "24 months")
+  ) |>
+  autoplot(tail(retail, 12*5), alpha = 0.5) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Best Models Forecast of Monthly Retail Turnover in ACT",
+          subtitle = "Forecasted on Test Set") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+The @fig-fcarimaets depicts the forecast of ARIMA and ETS models for 24 months ahead (starting from Jan'21). For ARIMA model, initially, the point forecast can follow the test data point quiet closely, and the prediction intervals still capture it. However, when significant drop occurs, the point forecasts do not follow that, even worse, the test data point is out of the prediction interval. For the rest of the movement, especially after seasonal peak, both point forecasts and prediction intervals are back to follow the test data point. 
+
+For ETS model, initially it performs slightly better than ARIMA, proven in the first few months, the point forecasts are closer to the test set data points. However, the same condition as ARIMA occurs at the point of significant drop. Shortly after the seasonal peak, ETS model become worse, especially during 2022, where the point forecasts and prediction intervals do not follow the trend anymore and are moving far away from the test data point. Even worse, in the last few months of 2022, the test data points are way above the prediction intervals. 
+
+In summary, For ARIMA and ETS, it seems the point forecasts and prediction intervals are able to capture the test data point in the first few observations. However, when significant drop occurs, they do not follow it closely. This could be the case because COVID-19 event breaking the pattern of the data. We trained the model based on data before COVID-19 happening, where it has captured certain patterns in the data, but the unpredictable pattern of COVID-19 makes the forecast become a bit inaccurate. Fortunately for ARIMA, the forecast is able to capture and follow closely the rest of the test data points. Unfortunately, this is not the case for ETS model. Therefore, for this data, ARIMA model performs better.
+
+
+## Out-of-Sample (OOS) point forecasts
+
+Producing the out-of-sample point forecast using the full data set by fitting the best two models can be achieved with the code here:
+```{r}
+fit_oos <- retail |>
+  model(
+    arima111111 = ARIMA(box_cox(Turnover, 0.04826666) ~ 0 + pdq(1,1,1) + PDQ(1,1,1)),
+    ets_mam = ETS(Turnover ~ error("M") + trend("A") + season("M"))
+  )
+```
+
+This is our forecast using out-of-sample for the next 2 years (24 months) with 80% prediction interval.
+```{r}
+#| label: tbl-preditrvl3
+#| tbl-cap: "80% Prediction Interval of the Best Models"
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true
+
+fit_oos |> 
+  forecast(h = 24) |>
+  hilo(level = 80) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+Additionally, the plot would look like this.
+```{r}
+#| label: fig-fcoos
+#| fig-cap: "Out-of-sample Model Forecast 24 months Ahead"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_oos |> 
+  select(State, Industry, arima111111, ets_mam) |>  
+  forecast(h = 24) |> 
+  autoplot(tail(retail, 12*5), alpha = 0.5, level = 80) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Best OOS Models Forecast of Monthly Retail Turnover in ACT",
+          subtitle = "24 Months Ahead Forecasts") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+
+
+
+## Comparing Out-of-Sample Model against ABS Data
+
+After downloading the latest release data from ABS's website, several data transformations steps are needed before we utilise this data to fit our model.
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+latest_retail_to <- readxl::read_excel("8501011.xlsx", sheet = 2)
+
+# remove unnecessary rows
+latest_retail_to <- latest_retail_to[-c(1:8),]
+
+# select only the necessary columns
+latest_retail_to <- latest_retail_to |>
+  select(`...1`, `Turnover ;  Australian Capital Territory ;  Other retailing ;`) |>
+  
+  # create the new column for series ID, Industry and State
+  mutate(State = "Australian Capital Territory",
+         Industry = "Other retailing",
+         `Series ID` = "A3349607K") |>
+  rename(Turnover = `Turnover ;  Australian Capital Territory ;  Other retailing ;`)
+
+# remove the series ID row
+latest_retail_to <- latest_retail_to[-1,] 
+
+# decode year month
+latest_retail_to <-
+  latest_retail_to |>
+  mutate(...1 = format(as.Date("1900-01-01") +
+                        # subtract 2 to adjust for leap year
+                        as.numeric(...1) - 2, 
+                        "%Y %b"),
+         Turnover = as.numeric(Turnover))|>
+  rename(Month = ...1)
+
+
+# reorder the columns to match the retail data set
+# this is just for ease of understanding and comparison
+latest_retail_to <- latest_retail_to |>
+  select(State, Industry, `Series ID`, Month, Turnover)
+
+# Convert to tsibble for time series analysis
+latest_retail_to <- latest_retail_to |>
+  mutate(Month = yearmonth(Month)) |>
+  as_tsibble(key = c(State, Industry),
+             index = Month)
+
+# for checking purposes
+#data_check <- latest_retail_to |>
+#  inner_join(retail, Turnover, by = "Month") |>
+#  mutate(Turnover_check = Turnover.x - Turnover.y)
+#sum(data_check$Turnover_check)
+```
+
+
+### Out-of-Sample Model Forecast
+
+Now that the data is ready, let's fit the ABS data with our best models.
+```{r}
+#| label: fig-fcoosabs
+#| fig-cap: "Out-of-sample Model Forecast 24 months Ahead"
+#| echo: true
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_oos |> 
+  select(State, Industry, arima111111, ets_mam) |>  
+  forecast(h = 24) |> 
+  autoplot(tail(latest_retail_to, 12*3), alpha = 0.5, level = 80) +
+  xlab("Year and Month") +
+  ylab("Turnover (in Million AUD)") +
+  ggtitle(label = "Best OOS Models Forecast of Monthly Retail Turnover in ACT",
+          subtitle = "Forecasted on ABS Latest Retail Data") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"),
+        plot.subtitle = element_text(hjust=0.5, face = "italic", size = 10))
+```
+Our forecast on ABS data can be seen from @fig-fcoosabs, both ARIMA and ETS models perform similarly before the significant spike occurs, where some of ARIMA's point forecasts are closer to the actual value, and so do some ETS's point forecasts. In December, when the peak occurs, ETS's point forecast is closer to the actual value, but unfortunately for ARIMA, the actual value almost slip out of the prediction interval, just at the tip of the lower point of interval. There might be another effect similar to COVID-19, because the seasonal peak is lower than the previous year, resulting in near-miss forecast point. Our best guess is because of the high inflation rate across Australia that happened towards the end of December 2023, making the cost of living higher, affecting resident's economic power, which eventually affect the retail industry. After the seasonal peak, ARIMA model is closer to the actual values. This is consistent with what we have observed during the training vs test set where ETS model perform worse in the long-term compared to ARIMA model.
+
+
+### Out-of-sample Model Performance
+
+Looking at the model performance itself, considering our assessment from the previous section, we would expect ARIMA model to be the better model.
+```{r}
+#| label: tbl-accreport
+#| tbl-cap: "Accuracy Performance of the Best Models on Latest Retail Data from ABS"
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+#| eval: true 
+
+fit_oos |>
+  forecast(h = 24) |> 
+  accuracy(latest_retail_to)|>
+  select(-ME, -MPE, -ACF1) |>
+  arrange(RMSE) |>
+  kable() |> 
+  kable_styling(full_width = T)
+```
+
+As can be seen from the table, ARIMA does come out as the better model. The RMSE value of ARIMA model is smaller than ETS Model, although they do not differ too much. 
+
+## Benefits and Limitations
+### ARIMA
+
+**- Benefit**
+
+1. Works well with the data that we analyse, in this case data that have multiplicative seasonality pattern and also additive trend.
+2. Can handle autocorrelation.
+3. Forecasting horizon, considering we are forecasting a long-term horizon, ARIMA models may be more suitable since its ability to capture complex patterns over longer periods.
+
+**- Limitations**
+
+1. Take multiple steps in order to identify the appropriate model to include, such as data transformation, seasonal difference, first difference (if needed), and assessing the AR & MA (both seasonal and non-seasonal). 
+2. ARIMA model has not been able to capture all information from the data, proven by the residual diagnostics where the residuals do not appear as white noise.
+3. Due to the capability of handling data complexity, ARIMA model tends to overfit. This is shown during the seasonal peak when it is lower than the seasonal peak of previous year, the point forecasts are way above the actual values. 
+
+
+### ETS
+
+**- Benefit**
+
+1. Easier to create. Since ETS does not have strict assumptions about stationarity, we are able to model the data straight away. 
+2. Works well for short-term forecast.
+3. Since it is a simpler model, it tends to not overfit. As what we have experienced during the unusual pattern occur, the point forecasts are closer to the actual values. 
+
+**- Limitations**
+
+1. Does not work well with data that have multiplicative seasonality pattern.
+2. Short-term forecasting horizon. As can be seen from @fig-fcarimaets, when the forecast is longer, the differences between test data point vs point forecast are larger. 
+3. Same with ARIMA, ETS model has not been able to capture all information from the data, proven by the residuals that do not appear as white noise. 
+
+
+:::
